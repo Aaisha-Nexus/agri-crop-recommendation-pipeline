@@ -65,3 +65,4 @@ model_path = os.path.join("models", "crop_model.pkl")
 os.makedirs("models", exist_ok=True)
 
 joblib.dump(rf, model_path)
+print("Model saved successfully!")

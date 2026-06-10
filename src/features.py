@@ -1,3 +1,5 @@
+import os
+import joblib
 import pandas as pd
 
 from sklearn.preprocessing import LabelEncoder
@@ -12,7 +14,6 @@ def create_features():
     # -----------------------------------
     # Rainfall Categories
     # -----------------------------------
-
     df["rainfall_category"] = pd.cut(
         df["rainfall"],
         bins=[0, 100, 200, 400],
@@ -22,7 +23,6 @@ def create_features():
     # -----------------------------------
     # Temperature Categories
     # -----------------------------------
-
     df["temperature_category"] = pd.cut(
         df["temperature"],
         bins=[0, 20, 30, 50],
@@ -32,7 +32,6 @@ def create_features():
     # -----------------------------------
     # Humidity Categories
     # -----------------------------------
-
     df["humidity_category"] = pd.cut(
         df["humidity"],
         bins=[0, 40, 70, 100],
@@ -42,36 +41,25 @@ def create_features():
     # -----------------------------------
     # Season Feature
     # -----------------------------------
-
     def season_mapper(temp):
-
         if temp < 20:
             return "Winter"
-
         elif temp < 30:
             return "Moderate"
-
         else:
             return "Summer"
 
-    df["season_type"] = df["temperature"].apply(
-        season_mapper
-    )
+    df["season_type"] = df["temperature"].apply(season_mapper)
 
     # -----------------------------------
     # Encode Target
     # -----------------------------------
-
     le = LabelEncoder()
-
-    df["target"] = le.fit_transform(
-        df["label"]
-    )
+    df["target"] = le.fit_transform(df["label"])
 
     # -----------------------------------
-    # Define X
+    # Define X and y
     # -----------------------------------
-
     X = df.drop(
         columns=[
             "label",
@@ -84,7 +72,6 @@ def create_features():
     # -----------------------------------
     # One-Hot Encode Categories
     # -----------------------------------
-
     X = pd.get_dummies(
         X,
         columns=[
@@ -98,7 +85,6 @@ def create_features():
     # -----------------------------------
     # Scale Numerical Features
     # -----------------------------------
-
     scaler = StandardScaler()
 
     num_cols = [
@@ -111,16 +97,20 @@ def create_features():
         "rainfall"
     ]
 
-    X[num_cols] = scaler.fit_transform(
-        X[num_cols]
-    )
+    X[num_cols] = scaler.fit_transform(X[num_cols])
+
+    # -----------------------------------
+    # Save scaler and model columns
+    # -----------------------------------
+    os.makedirs("models", exist_ok=True)
+
+    joblib.dump(scaler, "models/scaler.pkl")
+    joblib.dump(X.columns.tolist(), "models/model_columns.pkl")
 
     # -----------------------------------
     # Final ML Dataset
     # -----------------------------------
-
     ml_ready = X.copy()
-
     ml_ready["target"] = y
 
     ml_ready.to_csv(
@@ -130,9 +120,10 @@ def create_features():
 
     print("Feature engineering complete!")
     print("ML-ready dataset saved!")
+    print("Scaler saved!")
+    print("Model columns saved!")
     print("Shape:", ml_ready.shape)
-    # print (ml_ready.head())
 
 
 if __name__ == "__main__":
-    create_features() 
+    create_features()
