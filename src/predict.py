@@ -2,73 +2,32 @@
 PREDICT.PY
 
 Purpose:
-This script loads the trained Random Forest model saved using Joblib
-and performs crop prediction on new input data.
+Loads the saved model and tests prediction using a real ML-ready row
+from crop_ml_ready.csv.
 
-Why are sample values used?
-
-The current model was trained using both original features and
-engineered features (19 total inputs), including:
-
-- N, P, K
-- temperature
-- humidity
-- pH
-- rainfall
-- rainfall categories
-- temperature categories
-- humidity categories
-- season categories
-
-Because these engineered features must be supplied during prediction,
-we currently use sample values from the dataset to verify that:
-
-1. The saved model loads successfully
-2. The deployment workflow works correctly
-3. Predictions can be generated outside the notebook
-
-Future Improvement (API Integration):
-In the next project phase, the prediction process will be upgraded.
-
-User Inputs:
-- Nitrogen (N)
-- Phosphorus (P)
-- Potassium (K)
-- pH
-- City / Location
-
-Weather API will automatically provide:
-- Temperature
-- Humidity
-- Rainfall information
-
-The system will then create the required engineered features,
-combine them with user inputs, and generate a real-time crop recommendation.
-
-Current version = Deployment testing
-Future version = Real-world prediction system
+This ensures prediction input has the same format used during training.
 """
 
-
-import joblib
-import numpy as np
 import os
+import joblib
+import pandas as pd
 
 # -----------------------
-# LOAD SAVED MODEL
+# PATHS
 # -----------------------
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-model_path = os.path.join(
-    os.path.dirname(__file__),
-    "../models/crop_model.pkl"
-)
+model_path = os.path.join(BASE_DIR, "models", "crop_model.pkl")
+data_path = os.path.join(BASE_DIR, "data", "processed", "crop_ml_ready.csv")
 
+# -----------------------
+# LOAD MODEL
+# -----------------------
 model = joblib.load(model_path)
 
 # -----------------------
 # CROP LABEL MAPPING
 # -----------------------
-
 crop_mapping = {
     0: "apple",
     1: "banana",
@@ -95,46 +54,50 @@ crop_mapping = {
 }
 
 # -----------------------
-# SAMPLE INPUT
+# PREDICT USING REAL ML-READY ROW
 # -----------------------
-# Replace with a real row from crop_ml_ready.csv
-# for deployment testing
+def predict_sample_row(row_index=0):
+    # Load ML-ready dataset
+    df = pd.read_csv(data_path)
 
-sample_data = np.array([
-    [
-        90,     # N
-        42,     # P
-        43,     # K
-        20.87,  # temperature
-        82.00,  # humidity
-        6.50,   # ph
-        202.93, # rainfall
+    # Separate features and target
+    X = df.drop("target", axis=1)
+    y = df["target"]
 
-        0,      # rainfall_category_Low
-        0,      # rainfall_category_Medium
-        1,      # rainfall_category_High
+    # Select one row for testing
+    # iloc[[row_index]] keeps it as a DataFrame, which sklearn expects
+    sample = X.iloc[[row_index]]
 
-        0,      # temperature_category_Cool
-        1,      # temperature_category_Moderate
-        0,      # temperature_category_Hot
+    # Get the actual crop label for the selected row
+    actual_encoded = y.iloc[row_index]
 
-        0,      # humidity_category_Low
-        0,      # humidity_category_Medium
-        1,      # humidity_category_High
+    # Predict crop for the selected row
+    # model.predict(sample) returns an array like [20]
+    # [0] extracts the first prediction from that array
+    predicted_encoded = model.predict(sample)[0]
 
-        0,      # season_type_Moderate
-        0,      # season_type_Summer
-        1       # season_type_Winter
-    ]
-])
+    # Convert encoded labels into crop names
+    predicted_crop = crop_mapping[predicted_encoded]
+    actual_crop = crop_mapping[actual_encoded]
 
-# -----------------------
-# MAKE PREDICTION
-# -----------------------
+    print("Prediction Test")
+    print("----------------")
+    print("Row Index:", row_index)
 
-prediction = model.predict(sample_data)
+    print("\nInput Values Used:")
+    print(sample)
 
-predicted_crop = crop_mapping[prediction[0]] # here prediction[0] means give me the first prediction from the array and then we will map it to the crop name using the crop_mapping dictionary
+    print("\nPredicted Encoded Label:", predicted_encoded)
+    print("Actual Encoded Label:", actual_encoded)
 
-print("Recommended Crop:", predicted_crop)
+    print("\nPredicted Crop:", predicted_crop)
+    print("Actual Crop:", actual_crop)
 
+    if predicted_crop == actual_crop:
+        print("\nResult: Correct prediction")
+    else:
+        print("\nResult: Incorrect prediction")
+
+
+if __name__ == "__main__":
+    predict_sample_row(150)
