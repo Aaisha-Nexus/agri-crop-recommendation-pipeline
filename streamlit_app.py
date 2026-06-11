@@ -3,6 +3,7 @@ import joblib
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+from google import genai
 
 # -----------------------
 # PAGE SETUP
@@ -63,6 +64,15 @@ crop_icons = {
     "pigeonpeas": "🌱"
 }
 
+
+
+# -----------------------
+# SESSION STATE
+# -----------------------
+# This keeps the latest prediction available for the AI assistant.
+# If the user asks a question after prediction, the assistant can use this context.
+if "latest_prediction_context" not in st.session_state:
+    st.session_state.latest_prediction_context = None
 
 def html(content):
     st.html(content)
@@ -561,6 +571,73 @@ st.markdown(
         font-size: 17px;
         font-weight: 700;
     }
+
+    .assistant-card {
+        background: linear-gradient(135deg, #ffffff 0%, #fff8e8 100%);
+        border: 1px solid #d9dec9;
+        border-radius: 30px;
+        box-shadow: 0 20px 45px rgba(44, 63, 34, 0.13);
+        padding: 38px 44px;
+        margin-top: 36px;
+    }
+
+    .assistant-title-row {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 12px;
+    }
+
+    .assistant-icon {
+        width: 62px;
+        height: 62px;
+        border-radius: 20px;
+        background: #e9f3dc;
+        border: 1px solid #d5e4c2;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 31px;
+    }
+
+    .assistant-title {
+        font-family: Georgia, serif;
+        font-size: 32px;
+        color: #111b0d;
+        font-weight: 900;
+        margin-bottom: 3px;
+    }
+
+    .assistant-subtitle {
+        color: #5d714e;
+        font-size: 15px;
+        line-height: 1.7;
+    }
+
+    .assistant-context {
+        background: #edf5df;
+        border: 1px solid #dce8ca;
+        border-radius: 20px;
+        padding: 18px 22px;
+        color: #355229;
+        font-size: 14px;
+        line-height: 1.8;
+        margin: 22px 0;
+    }
+
+    .assistant-answer {
+        background: #ffffff;
+        border: 1px solid #eadfc9;
+        border-left: 6px solid #c98a24;
+        border-radius: 22px;
+        padding: 24px 26px;
+        color: #26331d;
+        font-size: 16px;
+        line-height: 1.8;
+        margin-top: 22px;
+        box-shadow: 0 10px 24px rgba(44, 63, 34, 0.08);
+    }
+
     </style>
     """,
     unsafe_allow_html=True
@@ -677,6 +754,79 @@ def chip_values(rainfall, humidity, temperature):
         f"{get_rainfall_category(rainfall)} rainfall",
         f"{get_temperature_category(temperature)} temperature"
     ]
+
+
+# -----------------------
+# AI CROP ASSISTANT HELPERS
+# -----------------------
+# This function uses Gemini API to answer crop/agriculture questions.
+# It can answer general questions, and if a crop prediction exists, it also uses that context.
+def build_assistant_context():
+    context = st.session_state.latest_prediction_context
+
+    if context is None:
+        return "No crop prediction has been generated yet. Answer the user's agriculture question in a general and educational way."
+
+    return f"""
+Latest prediction context:
+- Recommended crop: {context['crop']}
+- Nitrogen: {context['N']}
+- Phosphorus: {context['P']}
+- Potassium: {context['K']}
+- Temperature: {context['temperature']} °C
+- Humidity: {context['humidity']} %
+- Soil pH: {context['ph']}
+- Rainfall: {context['rainfall']} mm
+- Rainfall category: {context['rainfall_category']}
+- Humidity category: {context['humidity_category']}
+- Temperature category: {context['temperature_category']}
+- Season type: {context['season_type']}
+"""
+
+
+def ask_gemini_agri_assistant(user_question):
+    try:
+        api_key = st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        return (
+            "Gemini API key is not configured yet. Add GEMINI_API_KEY in "
+            ".streamlit/secrets.toml locally and in Streamlit Cloud secrets after deployment."
+        )
+
+    context = build_assistant_context()
+
+    prompt = f"""
+You are an AI Crop Assistant inside a crop recommendation machine learning project.
+
+Your role:
+- Answer agriculture, soil, crop, nutrient, rainfall, humidity, and crop-care questions.
+- Keep answers simple, practical, and beginner-friendly.
+- Use the latest prediction context if it is relevant.
+- If the user asks a general agriculture question, answer generally.
+- Do not claim to replace professional agronomists or local agricultural experts.
+- If a question depends on local climate, soil testing, pests, or regulations, advise checking local agricultural guidance.
+
+Project/model context:
+{context}
+
+User question:
+{user_question}
+
+Answer in 4 to 7 concise bullet points or short paragraphs.
+"""
+
+    try:
+        client = genai.Client(api_key=api_key)
+
+        response = client.models.generate_content(
+            model="gemini-3.5-flash",
+            contents=prompt
+        )
+
+        return response.text
+
+    except Exception as e:
+        return f"AI assistant error: {e}"
 
 
 def radar_svg(N, P, K, temperature, humidity, rainfall):
@@ -850,6 +1000,24 @@ if predict_button:
     chips = chip_values(rainfall, humidity, temperature)
     confidence_width = min(confidence, 100)
 
+    # Save the latest prediction context for the AI Crop Assistant.
+    # This lets the assistant answer questions related to the current recommendation.
+    st.session_state.latest_prediction_context = {
+        "crop": crop,
+        "N": N,
+        "P": P,
+        "K": K,
+        "temperature": temperature,
+        "humidity": humidity,
+        "ph": ph,
+        "rainfall": rainfall,
+        "rainfall_category": get_rainfall_category(rainfall),
+        "humidity_category": get_humidity_category(humidity),
+        "temperature_category": get_temperature_category(temperature),
+        "season_type": get_season_type(temperature)
+    }
+
+
     html(f"""
     <div class="result-card">
         <div class="small-label">Recommended Crop</div>
@@ -1020,3 +1188,82 @@ if predict_button:
 
     <div class="footer-action">↻ Try different parameters</div>
     """)
+
+
+# -----------------------
+# AI CROP ASSISTANT SECTION
+# -----------------------
+# This section adds an LLM-powered assistant.
+# Users can ask general agriculture questions or questions about the latest predicted crop.
+html("""
+<div class="assistant-card">
+    <div class="assistant-title-row">
+        <div class="assistant-icon">🤖</div>
+        <div>
+            <div class="small-label">AI Crop Assistant</div>
+            <div class="assistant-title">Ask Agriculture Questions</div>
+            <div class="assistant-subtitle">
+                Ask about crops, soil nutrients, rainfall, humidity, pH, planting care, or the latest recommendation.
+            </div>
+        </div>
+    </div>
+</div>
+""")
+
+current_context = st.session_state.latest_prediction_context
+
+if current_context is not None:
+    html(f"""
+    <div class="assistant-context">
+        <b>Current prediction context:</b><br>
+        Recommended crop: <b>{current_context['crop'].title()}</b> |
+        Rainfall: <b>{current_context['rainfall_category']}</b> |
+        Humidity: <b>{current_context['humidity_category']}</b> |
+        Temperature: <b>{current_context['temperature_category']}</b> |
+        Season: <b>{current_context['season_type']}</b>
+    </div>
+    """)
+else:
+    html("""
+    <div class="assistant-context">
+        <b>No crop prediction selected yet.</b><br>
+        You can still ask general agriculture questions, or generate a crop recommendation first for more context-aware answers.
+    </div>
+    """)
+
+example_question = st.selectbox(
+    "Choose a sample question or write your own below",
+    [
+        "Why was this crop recommended?",
+        "How can I improve soil pH naturally?",
+        "What does high nitrogen mean for crops?",
+        "Which crops generally prefer high rainfall?",
+        "How does humidity affect crop growth?",
+        "Give basic care tips for the recommended crop."
+    ]
+)
+
+user_question = st.text_area(
+    "Ask the AI Crop Assistant",
+    value="",
+    placeholder="Example: Why is rice suitable for high rainfall and high humidity?",
+    height=110
+)
+
+ask_button = st.button("Ask AI Crop Assistant")
+
+if ask_button:
+    final_question = user_question.strip() if user_question.strip() else example_question
+
+    with st.spinner("Generating AI answer..."):
+        ai_answer = ask_gemini_agri_assistant(final_question)
+
+    st.markdown(
+        f"""
+        <div class="assistant-answer">
+            <b>Question:</b> {final_question}<br><br>
+            {ai_answer}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
