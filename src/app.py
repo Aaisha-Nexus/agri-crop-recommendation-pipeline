@@ -125,15 +125,30 @@ def predict():
     try:
         data = request.get_json()
 
+        required_fields = ["N", "P", "K", "temperature", "humidity", "ph", "rainfall"]
+
+        missing_fields = [
+            field for field in required_fields
+            if field not in data
+        ]
+
+        if missing_fields:
+            return jsonify({
+                "error": "Missing required fields",
+                "missing_fields": missing_fields
+            }), 400
+
         model_input = create_model_input(data)
 
         prediction = model.predict(model_input)[0]
         recommended_crop = crop_mapping[int(prediction)]
 
         return jsonify({
+            "status": "success",
             "recommended_crop": recommended_crop,
             "encoded_prediction": int(prediction),
-            "input_received": data
+            "input_received": data,
+            "message": f"{recommended_crop.title()} is recommended based on the given soil and environmental conditions."
         })
 
     except Exception as e:
