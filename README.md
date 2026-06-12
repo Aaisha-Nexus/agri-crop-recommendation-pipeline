@@ -378,6 +378,7 @@ Deployment features:
 The deployed application demonstrates the complete transition from machine learning experimentation to production-ready deployment.
 
 ```
+https://agri-crop-recommendation-pipeline-mmrssg66qq4vbc66htlmxm.streamlit.app/
 ```
 
 
