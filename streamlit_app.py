@@ -789,44 +789,62 @@ def ask_gemini_agri_assistant(user_question):
         api_key = st.secrets["GEMINI_API_KEY"]
     except Exception:
         return (
-            "Gemini API key is not configured yet. Add GEMINI_API_KEY in "
-            ".streamlit/secrets.toml locally and in Streamlit Cloud secrets after deployment."
+            "The AI Crop Assistant is not configured yet. "
+            "Please add GEMINI_API_KEY in Streamlit secrets."
         )
 
     context = build_assistant_context()
 
     prompt = f"""
-You are an AI Crop Assistant inside a crop recommendation machine learning project.
+You are an AI Crop Assistant for a crop recommendation app.
 
-Your role:
-- Answer agriculture, soil, crop, nutrient, rainfall, humidity, and crop-care questions.
-- Keep answers simple, practical, and beginner-friendly.
-- Use the latest prediction context if it is relevant.
-- If the user asks a general agriculture question, answer generally.
-- Do not claim to replace professional agronomists or local agricultural experts.
-- If a question depends on local climate, soil testing, pests, or regulations, advise checking local agricultural guidance.
+Answer only agriculture-related questions about crops, soil, nutrients, pH, rainfall, humidity, irrigation, and crop care.
 
-Project/model context:
+Keep the answer practical, beginner-friendly, and under 120 words.
+
+Use this project context only if relevant:
 {context}
 
 User question:
 {user_question}
-
-Answer in 4 to 7 concise bullet points or short paragraphs.
 """
+
+    fallback_answer = (
+        "The AI assistant is temporarily busy. Meanwhile, here is a helpful general tip: "
+        "for soil improvement, use compost or organic matter, test soil pH regularly, "
+        "and choose amendments based on whether the soil is too acidic or too alkaline."
+    )
 
     try:
         client = genai.Client(api_key=api_key)
 
-        response = client.models.generate_content(
-            model="gemini-3.5-flash",
-            contents=prompt
+        for attempt in range(3):
+            try:
+                response = client.models.generate_content(
+                    model="gemini-3.1-flash-lite",
+                    contents=prompt
+                )
+                return response.text
+
+            except Exception as e:
+                error_text = str(e)
+
+                if "503" in error_text or "UNAVAILABLE" in error_text:
+                    continue
+
+                return (
+                    "The AI assistant could not answer right now. "
+                    "Please try again with a shorter agriculture-related question."
+                )
+
+        return (
+            "The AI assistant is currently experiencing high traffic. "
+            "Please try again in a few moments.\n\n"
+            + fallback_answer
         )
 
-        return response.text
-
-    except Exception as e:
-        return f"AI assistant error: {e}"
+    except Exception:
+        return fallback_answer
 
 
 def radar_svg(N, P, K, temperature, humidity, rainfall):
@@ -1255,7 +1273,8 @@ ask_button = st.button("Ask AI Crop Assistant")
 if ask_button:
     final_question = user_question.strip() if user_question.strip() else example_question
 
-    with st.spinner("Generating AI answer..."):
+
+    with st.spinner("AI Crop Assistant is preparing a response..."):
         ai_answer = ask_gemini_agri_assistant(final_question)
 
     st.markdown(
