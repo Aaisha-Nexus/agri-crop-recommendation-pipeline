@@ -80,7 +80,8 @@ agri-crop-prediction/
 ---
 ## Dataset Information
 Dataset: [Crop Recommendation Dataset](https://www.kaggle.com/datasets/atharvaingle/crop-recommendation-dataset)
-Input Features:
+
+**Input Features:**
 
 * Nitrogen (N), Phosphorus (P), Potassium (K)
 * Temperature, Humidity, pH, Rainfall
